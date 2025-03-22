@@ -1,0 +1,68 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Modulation Simulator</title>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+  <h1>Modulation Simulator</h1>
+
+  <form id="simForm">
+    <label>Modulation Type:</label>
+    <select name="mod_type">
+      <option value="BPSK">BPSK</option>
+      <option value="QPSK">QPSK</option>
+    </select><br><br>
+
+    <label>SNR (dB):</label>
+    <input type="number" name="snr" value="10"><br><br>
+
+    <label>Number of Bits:</label>
+    <input type="number" name="num_bits" value="100"><br><br>
+
+    <button type="submit">Simulate</button>
+  </form>
+
+  <h2>Results</h2>
+  <div id="results">
+    <p><strong>BER:</strong> <span id="ber"></span></p>
+    <p><strong>Bandwidth:</strong> <span id="bw"></span></p>
+    <p><strong>Bits per Symbol:</strong> <span id="bps"></span></p>
+    <p><strong>Data Rate:</strong> <span id="rate"></span></p>
+
+    <h3>Time Domain</h3>
+    <img id="time_plot" width="500">
+
+    <h3>Frequency Domain</h3>
+    <img id="freq_plot" width="500">
+
+    <h3>Constellation Diagram</h3>
+    <img id="constellation_plot" width="500">
+  </div>
+
+  <script>
+    document.getElementById('simForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const response = await axios.post('/simulate', formData);
+      const data = response.data;
+
+      if (data.error) {
+        alert(data.error);
+        return;
+      }
+
+      document.getElementById('ber').textContent = data.ber.toFixed(4);
+      document.getElementById('bw').textContent = data.bw;
+      document.getElementById('bps').textContent = data.bps;
+      document.getElementById('rate').textContent = data.data_rate;
+
+      document.getElementById('time_plot').src = 'data:image/png;base64,' + data.time_plot;
+      document.getElementById('freq_plot').src = 'data:image/png;base64,' + data.freq_plot;
+      document.getElementById('constellation_plot').src = 'data:image/png;base64,' + data.constellation_plot;
+    });
+  </script>
+</body>
+</html>
