@@ -3,42 +3,97 @@
 <head>
     <title>Modulator Simulator</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        /* Input Section Styles */
+        .input-section {
+            padding: 10px;
+            border: 1px solid #ccc;
+            margin-bottom: 10px;
+        }
+        .input-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-gap: 10px;
+        }
+        .input-grid label,
+        .input-grid input,
+        .input-grid select {
+            width: 100%;
+        }
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        /* Chart Section styles remain unchanged */
+        .chart-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+        }
+        .chart-box {
+            width: 48%;
+            margin-bottom: 20px;
+        }
+        .chart-box canvas {
+            width: 100%;
+            height: 300px;
+        }
+        .chart-row {
+            display: flex;
+            justify-content: space-between;
+        }
+        .chart-row .chart-box {
+            width: 48%;
+        }
+    </style>
 </head>
 <body>
     <form method="POST">
-        <div style="border:1px solid #ccc; padding:10px;">
+        <div class="input-section">
             <h3>Input Section</h3>
-            <label>Type of Digital Modulation:</label><br>
-            <input type="radio" name="mod_type" value="QAM"  {% if mod_type == 'QAM' %}checked{% endif %}> QAM<br>
-            <input type="radio" name="mod_type" value="PSK"  {% if mod_type == 'PSK' %}checked{% endif %}> PSK<br>
-            <input type="radio" name="mod_type" value="FSK"  {% if mod_type == 'FSK' %}checked{% endif %}> FSK<br>
-            <input type="radio" name="mod_type" value="ASK"  {% if mod_type == 'ASK' %}checked{% endif %}> ASK<br>
-            <input type="radio" name="mod_type" value="CSS"  {% if mod_type == 'CSS' %}checked{% endif %}> CSS<br><br>
-
-            <label>Modulation Order (2^x):</label>
-            <select name="mod_order">
-                {% for val in [2,4,8,16,32,64,128,256,512,1024,2048,4096,8192,16384,32768,65536] %}
-                    <option value="{{val}}" {% if mod_order == val %}selected{% endif %}>{{val}}</option>
-                {% endfor %}
-            </select><br><br>
-
-            <label>SNR (dB):</label><br>
-            <input type="number" step="0.01" name="snr" value="{{snr}}"><br><br>
-
-            <label>Target Data Rate (Mbps):</label><br>
-            <input type="number" step="0.01" name="target_data_rate" value="{{target_data_rate}}"><br><br>
-
-            <label>Sample Data Stream (bits):</label><br>
-            <input type="text" name="sample_data" value="{{sample_data}}"><br><br>
-
-            <label>Auto Compute:</label>
-            <input type="checkbox" name="auto_compute" {% if auto_compute %}checked{% endif %}
-                   onchange="this.form.submit()">
-            <br><br>
-
-            <button type="submit">Run Simulation</button>
+            <div class="input-grid">
+                <!-- Left Column: Modulation type -->
+                <div>
+                    <label>Type of Digital Modulation:</label>
+                    <input type="radio" name="mod_type" value="QAM" {% if mod_type == 'QAM' %}checked{% endif %}> QAM<br>
+                    <input type="radio" name="mod_type" value="PSK" {% if mod_type == 'PSK' %}checked{% endif %}> PSK<br>
+                    <input type="radio" name="mod_type" value="FSK" {% if mod_type == 'FSK' %}checked{% endif %}> FSK<br>
+                    <input type="radio" name="mod_type" value="ASK" {% if mod_type == 'ASK' %}checked{% endif %}> ASK<br>
+                    <input type="radio" name="mod_type" value="CSS" {% if mod_type == 'CSS' %}checked{% endif %}> CSS<br>
+                </div>
+                <!-- Right Column: Order, SNR, and Target Data Rate -->
+                <div>
+                    <label>Modulation Order (2^x):</label>
+                    <select name="mod_order">
+                        {% for val in [2,4,8,16,32,64,128,256,512,1024,2048,4096,8192,16384,32768,65536] %}
+                            <option value="{{val}}" {% if mod_order == val %}selected{% endif %}>{{val}}</option>
+                        {% endfor %}
+                    </select>
+                    <label>SNR (dB):</label>
+                    <input type="number" step="0.01" name="snr" value="{{snr}}">
+                    <label>Target Data Rate (Mbps):</label>
+                    <input type="number" step="0.01" name="target_data_rate" value="{{target_data_rate}}">
+                </div>
+                <!-- Full width: Sample Data -->
+                <div class="full-width">
+                    <label>Sample Data Stream (bits):</label>
+                    <input type="text" name="sample_data" value="{{sample_data}}">
+                </div>
+                <!-- Full width: Auto Compute and Button -->
+                <div class="full-width">
+                    <label>Auto Compute:</label>
+                    <input type="checkbox" name="auto_compute" {% if auto_compute %}checked{% endif %}
+                           onchange="this.form.submit()">
+                    <button type="submit">Run Simulation</button>
+                </div>
+            </div>
         </div>
     </form>
+
     <div style="border:1px solid #ccc; padding:10px; margin-top:10px;">
         <h3>Result Section</h3>
         <div style="display:flex; justify-content:space-around;">
@@ -70,35 +125,63 @@
     <!-- Chart Section -->
     <div style="border:1px solid #ccc; padding:10px; margin-top:10px;">
         <h3>Chart Section</h3>
-        <canvas id="timeDomainChart"></canvas>
-        <canvas id="freqChart"></canvas>
-        <canvas id="berSNRChart"></canvas>
-        <canvas id="constellationChart"></canvas>
-        <canvas id="noiseChart"></canvas>
+        <!-- 2x2 Grid for four charts -->
+        <div class="chart-container">
+            <!-- Time Domain Chart with Time Axis -->
+            <div class="chart-box">
+                <canvas id="timeDomainChart"></canvas>
+            </div>
+            <!-- Frequency Spectrum Chart -->
+            <div class="chart-box">
+                <canvas id="freqChart"></canvas>
+            </div>
+            <!-- BER vs SNR Chart -->
+            <div class="chart-box">
+                <canvas id="berSNRChart"></canvas>
+            </div>
+            <!-- Constellation Chart with Cross Lines -->
+            <div class="chart-box">
+                <canvas id="constellationChart"></canvas>
+            </div>
+        </div>
+        <!-- Row for Noise and Index Domain Charts -->
+        <div class="chart-row">
+            <div class="chart-box">
+                <canvas id="noiseChart"></canvas>
+            </div>
+            <div class="chart-box">
+                <canvas id="indexDomainChart"></canvas>
+            </div>
+        </div>
     </div>
 
     <script>
-        // Time Domain
+        // Time Domain Chart (x-axis: Time in seconds)
         var timeCtx = document.getElementById('timeDomainChart').getContext('2d');
         var timeData = {{ time_domain_data|safe }};
-        var timeLabels = [];
-        for(var i=0; i<timeData.length; i++){
-            timeLabels.push(i);
-        }
+        var timeValues = {{ time_values|safe }};
         new Chart(timeCtx, {
             type: 'line',
             data: {
-                labels: timeLabels,
+                labels: timeValues,
                 datasets: [{
-                    label: 'Time Domain Signal',
+                    label: 'Time Domain Signal (Time in sec)',
                     data: timeData,
                     borderColor: 'blue',
                     fill: false
                 }]
+            },
+            options: {
+                maintainAspectRatio: false,
+                plugins: { legend: { display: true } },
+                scales: {
+                    x: { title: { display: true, text: 'Time (s)' } },
+                    y: { title: { display: true, text: 'Amplitude' } }
+                }
             }
         });
 
-        // Frequency Spectrum
+        // Frequency Spectrum Chart
         var freqCtx = document.getElementById('freqChart').getContext('2d');
         var freqData = {{ freq_data|safe }};
         var freqLabels = freqData.map(d => d.freq);
@@ -112,10 +195,18 @@
                     data: freqAmps,
                     backgroundColor: 'orange'
                 }]
+            },
+            options: {
+                maintainAspectRatio: false,
+                plugins: { legend: { display: true } },
+                scales: {
+                    x: { title: { display: true, text: 'Frequency (Hz)' } },
+                    y: { title: { display: true, text: 'Amplitude' } }
+                }
             }
         });
 
-        // BER vs SNR
+        // BER vs SNR Chart
         var berCtx = document.getElementById('berSNRChart').getContext('2d');
         var berData = {{ ber_snr_data|safe }};
         var snrLabels = berData.map(d => d.snr);
@@ -125,43 +216,66 @@
             data: {
                 labels: snrLabels,
                 datasets: [{
-                    label: 'BER vs SNR',
+                    label: 'BER vs. SNR',
                     data: berVals,
                     borderColor: 'green',
                     fill: false
                 }]
             },
             options: {
+                maintainAspectRatio: false,
+                plugins: { legend: { display: true } },
                 scales: {
-                    y: {
-                        type: 'logarithmic'
-                    }
+                    x: { title: { display: true, text: 'SNR (dB)' } },
+                    y: { type: 'logarithmic', title: { display: true, text: 'Bit Error Rate' } }
                 }
             }
         });
 
-        // Constellation
+        // Constellation Chart with center cross lines
         var constCtx = document.getElementById('constellationChart').getContext('2d');
         var constData = {{ constellation_data|safe }};
         var scatterData = constData.map(point => ({x: point.x, y: point.y}));
         new Chart(constCtx, {
             type: 'scatter',
             data: {
-                datasets: [{
-                    label: 'Constellation',
-                    data: scatterData,
-                    pointBackgroundColor: 'red'
-                }]
+                datasets: [
+                    {
+                        label: 'Constellation Points',
+                        data: scatterData,
+                        pointBackgroundColor: 'red'
+                    },
+                    {
+                        label: 'Horizontal Axis',
+                        type: 'line',
+                        data: [{x: -2, y: 0}, {x: 2, y: 0}],
+                        borderColor: 'black',
+                        borderDash: [5, 5],
+                        fill: false,
+                        pointRadius: 0
+                    },
+                    {
+                        label: 'Vertical Axis',
+                        type: 'line',
+                        data: [{x: 0, y: -2}, {x: 0, y: 2}],
+                        borderColor: 'black',
+                        borderDash: [5, 5],
+                        fill: false,
+                        pointRadius: 0
+                    }
+                ]
             },
             options: {
+                maintainAspectRatio: false,
+                plugins: { legend: { display: true } },
                 scales: {
-                    x: { min: -2, max: 2 },
-                    y: { min: -2, max: 2 }
+                    x: { min: -2, max: 2, title: { display: true, text: 'In-Phase' } },
+                    y: { min: -2, max: 2, title: { display: true, text: 'Quadrature' } }
                 }
             }
         });
 
-        // Acceptable Noise Level
+        // Acceptable Noise Level Chart (with random tolerance)
         var noiseCtx = document.getElementById('noiseChart').getContext('2d');
         var noiseData = {{ noise_data|safe }};
         var noiseScatter = noiseData.map(n => ({x: n.x, y: n.y}));
@@ -169,20 +283,47 @@
             type: 'scatter',
             data: {
                 datasets: [{
-                    label: 'Noise Boundary',
+                    label: 'Acceptable Noise Boundary',
                     data: noiseScatter,
                     pointBackgroundColor: 'purple'
                 }]
             },
             options: {
+                maintainAspectRatio: false,
+                plugins: { legend: { display: true } },
                 scales: {
-                    x: { min: -2, max: 2 },
-                    y: { min: -2, max: 2 }
+                    x: { min: -2, max: 2, title: { display: true, text: 'X' } },
+                    y: { min: -2, max: 2, title: { display: true, text: 'Y' } }
                 }
             }
         });
 
-        // Auto compute on input changes
+        // Index Domain Chart (x-axis: Sample Index)
+        var indexCtx = document.getElementById('indexDomainChart').getContext('2d');
+        var indexData = {{ time_domain_data|safe }};
+        var indexLabels = {{ index_labels|safe }};
+        new Chart(indexCtx, {
+            type: 'line',
+            data: {
+                labels: indexLabels,
+                datasets: [{
+                    label: 'Time Domain Signal (Index)',
+                    data: indexData,
+                    borderColor: 'blue',
+                    fill: false
+                }]
+            },
+            options: {
+                maintainAspectRatio: false,
+                plugins: { legend: { display: true } },
+                scales: {
+                    x: { title: { display: true, text: 'Sample Index' } },
+                    y: { title: { display: true, text: 'Amplitude' } }
+                }
+            }
+        });
+
+        // Auto compute on changes
         document.querySelectorAll('input[type="number"], input[type="text"], select').forEach(el => {
             el.addEventListener('change', () => {
                 var autoCompute = document.querySelector('input[name="auto_compute"]');
