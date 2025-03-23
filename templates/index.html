@@ -5,7 +5,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <!-- Input Section -->
     <form method="POST">
         <div style="border:1px solid #ccc; padding:10px;">
             <h3>Input Section</h3>
@@ -33,19 +32,16 @@
             <input type="text" name="sample_data" value="{{sample_data}}"><br><br>
 
             <label>Auto Compute:</label>
-            <input type="checkbox" name="auto_compute" {% if auto_compute %}checked{% endif %} 
+            <input type="checkbox" name="auto_compute" {% if auto_compute %}checked{% endif %}
                    onchange="this.form.submit()">
             <br><br>
 
             <button type="submit">Run Simulation</button>
         </div>
     </form>
-
-    <!-- Result Section -->
     <div style="border:1px solid #ccc; padding:10px; margin-top:10px;">
         <h3>Result Section</h3>
         <div style="display:flex; justify-content:space-around;">
-            <!-- Calculated Value -->
             <div>
                 <h4>Calculated Value</h4>
                 {% if calc_values.error %}
@@ -60,8 +56,6 @@
                     </ul>
                 {% endif %}
             </div>
-
-            <!-- Standard Value -->
             <div>
                 <h4>Standard Value</h4>
                 <ul>
@@ -77,47 +71,118 @@
     <div style="border:1px solid #ccc; padding:10px; margin-top:10px;">
         <h3>Chart Section</h3>
         <canvas id="timeDomainChart"></canvas>
+        <canvas id="freqChart"></canvas>
+        <canvas id="berSNRChart"></canvas>
+        <canvas id="constellationChart"></canvas>
+        <canvas id="noiseChart"></canvas>
     </div>
 
     <script>
-        var ctx = document.getElementById('timeDomainChart').getContext('2d');
-        var chartData = {{ time_domain_data|safe }};
-        var labels = [];
-        for(var i=0; i<chartData.length; i++){
-            labels.push(i);
+        // Time Domain
+        var timeCtx = document.getElementById('timeDomainChart').getContext('2d');
+        var timeData = {{ time_domain_data|safe }};
+        var timeLabels = [];
+        for(var i=0; i<timeData.length; i++){
+            timeLabels.push(i);
         }
-        new Chart(ctx, {
+        new Chart(timeCtx, {
             type: 'line',
             data: {
-                labels: labels,
+                labels: timeLabels,
                 datasets: [{
                     label: 'Time Domain Signal',
-                    data: chartData,
+                    data: timeData,
                     borderColor: 'blue',
+                    fill: false
+                }]
+            }
+        });
+
+        // Frequency Spectrum
+        var freqCtx = document.getElementById('freqChart').getContext('2d');
+        var freqData = {{ freq_data|safe }};
+        var freqLabels = freqData.map(d => d.freq);
+        var freqAmps = freqData.map(d => d.amp);
+        new Chart(freqCtx, {
+            type: 'bar',
+            data: {
+                labels: freqLabels,
+                datasets: [{
+                    label: 'Spectrum Amplitude',
+                    data: freqAmps,
+                    backgroundColor: 'orange'
+                }]
+            }
+        });
+
+        // BER vs SNR
+        var berCtx = document.getElementById('berSNRChart').getContext('2d');
+        var berData = {{ ber_snr_data|safe }};
+        var snrLabels = berData.map(d => d.snr);
+        var berVals = berData.map(d => d.ber);
+        new Chart(berCtx, {
+            type: 'line',
+            data: {
+                labels: snrLabels,
+                datasets: [{
+                    label: 'BER vs SNR',
+                    data: berVals,
+                    borderColor: 'green',
                     fill: false
                 }]
             },
             options: {
-                responsive: true,
                 scales: {
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'Sample Index'
-                        }
-                    },
                     y: {
-                        title: {
-                            display: true,
-                            text: 'Amplitude'
-                        }
+                        type: 'logarithmic'
                     }
                 }
             }
         });
 
-        // Auto compute on change if needed
-        // If you want the form to submit automatically when inputs change (except for checkbox):
+        // Constellation
+        var constCtx = document.getElementById('constellationChart').getContext('2d');
+        var constData = {{ constellation_data|safe }};
+        var scatterData = constData.map(point => ({x: point.x, y: point.y}));
+        new Chart(constCtx, {
+            type: 'scatter',
+            data: {
+                datasets: [{
+                    label: 'Constellation',
+                    data: scatterData,
+                    pointBackgroundColor: 'red'
+                }]
+            },
+            options: {
+                scales: {
+                    x: { min: -2, max: 2 },
+                    y: { min: -2, max: 2 }
+                }
+            }
+        });
+
+        // Acceptable Noise Level
+        var noiseCtx = document.getElementById('noiseChart').getContext('2d');
+        var noiseData = {{ noise_data|safe }};
+        var noiseScatter = noiseData.map(n => ({x: n.x, y: n.y}));
+        new Chart(noiseCtx, {
+            type: 'scatter',
+            data: {
+                datasets: [{
+                    label: 'Noise Boundary',
+                    data: noiseScatter,
+                    pointBackgroundColor: 'purple'
+                }]
+            },
+            options: {
+                scales: {
+                    x: { min: -2, max: 2 },
+                    y: { min: -2, max: 2 }
+                }
+            }
+        });
+
+        // Auto compute on input changes
         document.querySelectorAll('input[type="number"], input[type="text"], select').forEach(el => {
             el.addEventListener('change', () => {
                 var autoCompute = document.querySelector('input[name="auto_compute"]');
