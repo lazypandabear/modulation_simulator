@@ -1,191 +1,131 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Modulation Simulator</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 20px;
-    }
-
-    h1 { font-size: 22px; margin-bottom: 10px; }
-
-    .section { margin-bottom: 25px; }
-
-    .radio-group label {
-      margin-right: 15px;
-    }
-
-    .slider-container {
-      margin: 15px 0;
-    }
-
-    input[type="number"], input[type="text"] {
-      width: 150px;
-      padding: 4px;
-    }
-
-    .row {
-      display: flex;
-      gap: 20px;
-      flex-wrap: wrap;
-    }
-
-    .col { flex: 1; min-width: 300px; }
-
-    .label {
-      font-weight: bold;
-    }
-
-    .metrics p, .standards p {
-      margin: 3px 0;
-    }
-
-    .plots {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 15px;
-    }
-
-    .plot img {
-      width: 100%;
-      border: 1px solid #ccc;
-    }
-
-    .plot-title {
-      font-weight: bold;
-      margin-bottom: 5px;
-    }
-  </style>
+    <title>Modulator Simulator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-  <h1>Modulation Simulator</h1>
+    <!-- Input Section -->
+    <form method="POST">
+        <div style="border:1px solid #ccc; padding:10px;">
+            <h3>Input Section</h3>
+            <label>Type of Digital Modulation:</label><br>
+            <input type="radio" name="mod_type" value="QAM"  {% if mod_type == 'QAM' %}checked{% endif %}> QAM<br>
+            <input type="radio" name="mod_type" value="PSK"  {% if mod_type == 'PSK' %}checked{% endif %}> PSK<br>
+            <input type="radio" name="mod_type" value="FSK"  {% if mod_type == 'FSK' %}checked{% endif %}> FSK<br>
+            <input type="radio" name="mod_type" value="ASK"  {% if mod_type == 'ASK' %}checked{% endif %}> ASK<br>
+            <input type="radio" name="mod_type" value="CSS"  {% if mod_type == 'CSS' %}checked{% endif %}> CSS<br><br>
 
-  <!-- Section: Input -->
-  <div class="section">
-    <div class="radio-group">
-      <label><input type="radio" name="mod_type" value="QAM" checked> QAM</label>
-      <label><input type="radio" name="mod_type" value="PSK"> PSK</label>
-      <label><input type="radio" name="mod_type" value="FSK"> FSK</label>
-      <label><input type="radio" name="mod_type" value="ASK"> ASK</label>
-      <label><input type="radio" name="mod_type" value="CSS"> CSS</label>
+            <label>Modulation Order (2^x):</label>
+            <select name="mod_order">
+                {% for val in [2,4,8,16,32,64,128,256,512,1024,2048,4096,8192,16384,32768,65536] %}
+                    <option value="{{val}}" {% if mod_order == val %}selected{% endif %}>{{val}}</option>
+                {% endfor %}
+            </select><br><br>
+
+            <label>SNR (dB):</label><br>
+            <input type="number" step="0.01" name="snr" value="{{snr}}"><br><br>
+
+            <label>Target Data Rate (Mbps):</label><br>
+            <input type="number" step="0.01" name="target_data_rate" value="{{target_data_rate}}"><br><br>
+
+            <label>Sample Data Stream (bits):</label><br>
+            <input type="text" name="sample_data" value="{{sample_data}}"><br><br>
+
+            <label>Auto Compute:</label>
+            <input type="checkbox" name="auto_compute" {% if auto_compute %}checked{% endif %} 
+                   onchange="this.form.submit()">
+            <br><br>
+
+            <button type="submit">Run Simulation</button>
+        </div>
+    </form>
+
+    <!-- Result Section -->
+    <div style="border:1px solid #ccc; padding:10px; margin-top:10px;">
+        <h3>Result Section</h3>
+        <div style="display:flex; justify-content:space-around;">
+            <!-- Calculated Value -->
+            <div>
+                <h4>Calculated Value</h4>
+                {% if calc_values.error %}
+                    <p style="color:red;">{{calc_values.error}}</p>
+                {% else %}
+                    <ul>
+                    {% for key, val in calc_values.items() %}
+                        {% if key != 'error' %}
+                            <li><strong>{{key}}:</strong> {{val}}</li>
+                        {% endif %}
+                    {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+
+            <!-- Standard Value -->
+            <div>
+                <h4>Standard Value</h4>
+                <ul>
+                {% for key, val in standard_values.items() %}
+                    <li><strong>{{key}}:</strong> {{val}}</li>
+                {% endfor %}
+                </ul>
+            </div>
+        </div>
     </div>
 
-    <div class="slider-container">
-      <label for="mod_order">MODULATION ORDER:</label>
-      <input type="range" id="mod_order" min="2" max="65536" step="1" value="64">
-      <div style="font-size: 12px;">
-        2 • 4 • 8 • 16 • 32 • 64 • 128 • 256 • 512 • 1024 • 2048 • 4096 • 8192 • 16384 • 32768 • 65536
-      </div>
+    <!-- Chart Section -->
+    <div style="border:1px solid #ccc; padding:10px; margin-top:10px;">
+        <h3>Chart Section</h3>
+        <canvas id="timeDomainChart"></canvas>
     </div>
 
-    <div class="row">
-      <div class="col">
-        <label for="snr">SNR (dB):</label><br>
-        <input type="number" id="snr" value="10" min="0">
-      </div>
-      <div class="col">
-        <label for="num_bits">Target Data Rate (Mbps):</label><br>
-        <input type="number" id="num_bits" value="100" min="1">
-      </div>
-      <div class="col">
-        <label for="bitstream">Sample Data Stream:</label><br>
-        <input type="text" id="bitstream" placeholder="101010101111">
-        <small>"Input 1’s and 0’s"</small>
-      </div>
-    </div>
-  </div>
+    <script>
+        var ctx = document.getElementById('timeDomainChart').getContext('2d');
+        var chartData = {{ time_domain_data|safe }};
+        var labels = [];
+        for(var i=0; i<chartData.length; i++){
+            labels.push(i);
+        }
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Time Domain Signal',
+                    data: chartData,
+                    borderColor: 'blue',
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Sample Index'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Amplitude'
+                        }
+                    }
+                }
+            }
+        });
 
-  <!-- Section: Calculated and Standard Values -->
-  <div class="section row">
-    <div class="col metrics">
-      <h3>CALCULATED VALUE</h3>
-      <p><span class="label">SNR REQUIREMENT (dB):</span> <span id="rsnr">-</span></p>
-      <p><span class="label">BANDWIDTH REQUIRED TO TRANSMIT THE SYMBOL:</span> <span id="rChannelBW">-</span> Hz</p>
-      <p><span class="label">BIT RATE OR BITS PER SYMBOL REQUIRED:</span> <span id="bps">-</span> bits</p>
-      <p><span class="label">BAUD RATE OR SYMBOL RATE (SYMBOLS/SECOND):</span> <span id="baud">-</span></p>
-      <p><span class="label">CALCULATED THROUGHPUT:</span> <span id="throughput">-</span> Gbps</p>
-    </div>
-    <div class="col standards">
-      <h3>STANDARD VALUE</h3>
-      <p>STANDARD: IEEE 802.11BE WiFi 7</p>
-      <p>CHANNEL BW BASED ON STANDARD: 320 MHz</p>
-      <p>MCS RATE: <span id="bps2">-</span> bits</p>
-      <p>STANDARD SNR VALUE (dB): 30</p>
-      <p>STANDARD THROUGHPUT: 10 Gbps</p>
-    </div>
-  </div>
-
-  <!-- Section: Visuals -->
-  <div class="section">
-    <h3>THROUGHPUT</h3>
-    <div class="plots">
-      <div class="plot">
-        <div class="plot-title">SYMBOL TIME DOMAIN SIGNAL</div>
-        <img id="time_plot" src="">
-      </div>
-      <div class="plot">
-        <div class="plot-title">SYMBOL BANDWIDTH USAGE</div>
-        <img id="freq_plot" src="">
-      </div>
-      <div class="plot">
-        <div class="plot-title">ACCEPTABLE NOISE LEVEL</div>
-        <img src="/static/accept_noise.png">
-      </div>
-      <div class="plot">
-        <div class="plot-title">BER vs. SNR</div>
-        <img id="ber_curve" src="">
-      </div>
-      <div class="plot">
-        <div class="plot-title">Constellation Diagram</div>
-        <img id="constellation_plot" src="">
-      </div>
-    </div>
-  </div>
-
-  <script>
-    const inputs = document.querySelectorAll('input');
-    inputs.forEach(input => input.addEventListener('input', update));
-
-    function getSelectedModType() {
-      return document.querySelector('input[name="mod_type"]:checked').value;
-    }
-
-    async function update() {
-      const formData = new FormData();
-      formData.append('mod_type', getSelectedModType());
-      formData.append('mod_order', document.getElementById('mod_order').value);
-      formData.append('snr', document.getElementById('snr').value);
-      formData.append('num_bits', document.getElementById('num_bits').value);
-      formData.append('bitstream', document.getElementById('bitstream').value);
-
-      const res = await fetch('/simulate', { method: 'POST', body: formData });
-      const data = await res.json();
-
-      if (data.error) return alert(data.error);
-
-      // Value mappings
-      document.getElementById('rsnr').textContent = (10 * Math.log10(1 / data.ber)).toFixed(2);
-      document.getElementById('rChannelBW').textContent = data.bw;
-      document.getElementById('bps').textContent = data.bps;
-      document.getElementById('bps2').textContent = data.bps;
-      document.getElementById('baud').textContent = data.baud;
-      document.getElementById('throughput').textContent = (data.data_rate / 1e9).toFixed(2);
-      document.getElementById('ber').textContent = data.ber.toFixed(6);
-
-      // Image updates
-      document.getElementById('time_plot').src = 'data:image/png;base64,' + data.time_plot;
-      document.getElementById('freq_plot').src = 'data:image/png;base64,' + data.freq_plot;
-      document.getElementById('constellation_plot').src = 'data:image/png;base64,' + data.constellation_plot;
-
-      // BER Curve
-      const berRes = await fetch('/ber_curve', { method: 'POST', body: formData });
-      const berData = await berRes.json();
-      document.getElementById('ber_curve').src = 'data:image/png;base64,' + berData.ber_curve;
-    }
-
-    window.onload = update;
-  </script>
+        // Auto compute on change if needed
+        // If you want the form to submit automatically when inputs change (except for checkbox):
+        document.querySelectorAll('input[type="number"], input[type="text"], select').forEach(el => {
+            el.addEventListener('change', () => {
+                var autoCompute = document.querySelector('input[name="auto_compute"]');
+                if(autoCompute && autoCompute.checked) {
+                    document.forms[0].submit();
+                }
+            });
+        });
+    </script>
 </body>
 </html>

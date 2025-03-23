@@ -1,179 +1,125 @@
-# app.py
 from flask import Flask, render_template, request, jsonify
-import numpy as np
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import io
-import base64
-from scipy import signal
-from scipy.signal import upfirdn
-from scipy.special import erfc
+import math
 
 app = Flask(__name__)
 
-def encode_plot():
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
-    buf.seek(0)
-    encoded = base64.b64encode(buf.read()).decode('utf-8')
-    buf.close()
-    return encoded
+# Example standard values dictionary
+STANDARD_VALUES = {
+    "QAM": {
+        2:  {"snr_req": 8,  "bw_req": 10,  "bits_per_symbol": 1,  "baud_rate": 1e6, "throughput": 1e6},
+        4:  {"snr_req": 12, "bw_req": 20,  "bits_per_symbol": 2,  "baud_rate": 1e6, "throughput": 2e6},
+        8:  {"snr_req": 16, "bw_req": 30,  "bits_per_symbol": 3,  "baud_rate": 1e6, "throughput": 3e6},
+        16: {"snr_req": 20, "bw_req": 40,  "bits_per_symbol": 4,  "baud_rate": 1e6, "throughput": 4e6},
+        32: {"snr_req": 24, "bw_req": 50,  "bits_per_symbol": 5,  "baud_rate": 1e6, "throughput": 5e6}
+        # Extend as needed
+    },
+    "PSK": {
+        2:  {"snr_req": 9,  "bw_req": 15,  "bits_per_symbol": 1,  "baud_rate": 1e6, "throughput": 1e6},
+        4:  {"snr_req": 13, "bw_req": 25,  "bits_per_symbol": 2,  "baud_rate": 1e6, "throughput": 2e6},
+        8:  {"snr_req": 17, "bw_req": 35,  "bits_per_symbol": 3,  "baud_rate": 1e6, "throughput": 3e6}
+        # Extend as needed
+    },
+    "FSK": {
+        2:  {"snr_req": 7,  "bw_req": 12,  "bits_per_symbol": 1,  "baud_rate": 1e6, "throughput": 1e6},
+        4:  {"snr_req": 11, "bw_req": 22,  "bits_per_symbol": 2,  "baud_rate": 1e6, "throughput": 2e6}
+        # Extend as needed
+    },
+    "ASK": {
+        2:  {"snr_req": 10, "bw_req": 18,  "bits_per_symbol": 1,  "baud_rate": 1e6, "throughput": 1e6},
+        4:  {"snr_req": 14, "bw_req": 28,  "bits_per_symbol": 2,  "baud_rate": 1e6, "throughput": 2e6}
+        # Extend as needed
+    },
+    "CSS": {
+        2:  {"snr_req": 6,  "bw_req": 9,   "bits_per_symbol": 1,  "baud_rate": 1e6, "throughput": 1e6},
+        4:  {"snr_req": 10, "bw_req": 19,  "bits_per_symbol": 2,  "baud_rate": 1e6, "throughput": 2e6}
+        # Extend as needed
+    }
+}
 
-def rrc_filter(beta, span, sps):
-    N = span * sps
-    t = np.arange(-N/2, N/2 + 1) / sps
-    h = np.sinc(t) * np.cos(np.pi * beta * t) / (1 - (2 * beta * t)**2)
-    h[np.isnan(h)] = 0
-    h = h / np.sqrt(np.sum(h**2))
-    return h
-
-def theoretical_ber(mod_type, snr_db, M):
-    snr = 10**(snr_db/10)
-    if mod_type == 'BPSK':
-        return 0.5 * erfc(np.sqrt(snr))
-    elif mod_type == 'QPSK':
-        return 0.5 * erfc(np.sqrt(snr/2))
-    elif mod_type.startswith('QAM'):
-        k = np.log2(M)
-        return 4/k * (1 - 1/np.sqrt(M)) * 0.5 * erfc(np.sqrt(3 * k * snr / (M - 1)))
-    return 0.5 * erfc(np.sqrt(snr))
-
-def estimate_bandwidth(f, Pxx, threshold_db=-3):
-    max_power = np.max(10 * np.log10(Pxx))
-    threshold = max_power + threshold_db
-    bw_indices = np.where(10 * np.log10(Pxx) >= threshold)[0]
-    if bw_indices.size == 0:
-        return 0
-    bw = f[bw_indices[-1]] - f[bw_indices[0]]
-    return round(bw, 2)
-
-def digital_modulate(data, scheme='BPSK', M=2, snr=10, sps=8):
-    if scheme == 'BPSK':
-        symbols = 2 * data - 1
-    elif scheme == 'QPSK':
-        data = data.reshape(-1, 2)
-        symbols = (2*data[:, 0] - 1) + 1j * (2*data[:, 1] - 1)
-    elif scheme.startswith('QAM'):
-        bits_per_symbol = int(np.log2(M))
-        data = data[:len(data) // bits_per_symbol * bits_per_symbol]
-        symbols = []
-        for i in range(0, len(data), bits_per_symbol):
-            val = int("".join(str(b) for b in data[i:i+bits_per_symbol]), 2)
-            x = 2 * (val % int(np.sqrt(M))) - np.sqrt(M) + 1
-            y = 2 * (val // int(np.sqrt(M))) - np.sqrt(M) + 1
-            symbols.append(complex(x, y))
-        symbols = np.array(symbols)
-    else:
-        symbols = data
-
-    rrc = rrc_filter(beta=0.35, span=10, sps=sps)
-    shaped = upfirdn(rrc, symbols, sps)
-    noise = np.random.normal(0, 10**(-snr/20), len(shaped))
-    return shaped + noise
-
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    return render_template('index.html')
+    # Default inputs
+    mod_type = "QAM"
+    mod_order = 2
+    snr = 10
+    target_data_rate = 1.0
+    sample_data = "0" * 1  # Matches bits_per_symbol = 1 by default
+    auto_compute = False
 
-@app.route('/simulate', methods=['POST'])
-def simulate():
-    try:
-        mod_type = request.form['mod_type']
-        snr = float(request.form.get('snr', 10))
-        target_data_rate = float(request.form.get('num_bits', 100)) * 1e6
-        M = int(request.form.get('mod_order', 2))
-        bitstream = request.form.get('bitstream', '')
+    # Results
+    calc_values = {}
+    standard_values = {}
+    time_domain_data = []
 
-        actual_bits_per_symbol = int(np.log2(M)) if M > 1 else 1
-        required_bits_per_symbol = actual_bits_per_symbol
+    if request.method == 'POST':
+        mod_type = request.form.get("mod_type", "QAM")
+        mod_order = int(request.form.get("mod_order", 2))
+        snr = float(request.form.get("snr", 10))
+        target_data_rate = float(request.form.get("target_data_rate", 1.0))
+        sample_data = request.form.get("sample_data", "")
+        auto_compute = request.form.get("auto_compute") == "on"
 
-        if mod_type == 'QAM':
-            standard_mapping = {
-                4: 2, 16: 4, 64: 6, 256: 8, 1024: 10, 2048: 11, 4096: 12
+        # Calculate bits per symbol based on mod_order
+        bits_per_symbol = int(math.log2(mod_order))
+
+        # Validate sample_data length and content
+        if len(sample_data) != bits_per_symbol or any(ch not in ['0','1'] for ch in sample_data):
+            calc_values = {
+                "error": f"Sample data must be {bits_per_symbol} bits of 0 or 1."
             }
-            required_bits_per_symbol = standard_mapping.get(M, actual_bits_per_symbol)
-
-        baud_rate = target_data_rate / required_bits_per_symbol
-        num_bits = int(baud_rate * actual_bits_per_symbol)
-
-        if bitstream.strip():
-            data = np.array([int(b) for b in bitstream.strip() if b in ['0', '1']])
-            if len(data) < num_bits:
-                data = np.pad(data, (0, num_bits - len(data)), constant_values=0)
-            else:
-                data = data[:num_bits]
         else:
-            data = np.random.randint(0, 2, num_bits)
+            # Compute required parameters (simple placeholders)
+            bandwidth_required = target_data_rate / bits_per_symbol
+            snr_req = bits_per_symbol + 5
+            baud_rate = target_data_rate / bits_per_symbol
+            computed_throughput = target_data_rate
 
-        signal_out = digital_modulate(data, mod_type, M, snr)
+            calc_values = {
+                "SNR Requirement": f"{snr_req:.2f} dB",
+                "Bandwidth Required": f"{bandwidth_required:.2f} MHz",
+                "Bits per Symbol": bits_per_symbol,
+                "Baud Rate": f"{baud_rate:.2f} symbols/s",
+                "Calculated Throughput": f"{computed_throughput:.2f} Mbps"
+            }
 
-        plt.figure(figsize=(6, 3))
-        plt.plot(np.real(signal_out[:100]))
-        plt.title("Time Domain Signal")
-        plt.xlabel("Time")
-        plt.ylabel("Amplitude")
-        time_plot = encode_plot()
-        plt.close()
+            # Look up standard values if available
+            if mod_type in STANDARD_VALUES and mod_order in STANDARD_VALUES[mod_type]:
+                std = STANDARD_VALUES[mod_type][mod_order]
+                standard_values = {
+                    "SNR Req (Std)": f"{std['snr_req']} dB",
+                    "BW (Std)": f"{std['bw_req']} MHz",
+                    "Bits/Symbol (Std)": std['bits_per_symbol'],
+                    "Baud Rate (Std)": f"{std['baud_rate']} symbols/s",
+                    "Std Throughput": f"{std['throughput']} bps"
+                }
+            else:
+                standard_values = {
+                    "SNR Req (Std)": "N/A",
+                    "BW (Std)": "N/A",
+                    "Bits/Symbol (Std)": "N/A",
+                    "Baud Rate (Std)": "N/A",
+                    "Std Throughput": "N/A"
+                }
 
-        plt.figure(figsize=(6, 3))
-        Fs = 10000
-        f, Pxx = signal.welch(np.real(signal_out), fs=Fs, nperseg=1024)
-        bw = estimate_bandwidth(f, Pxx)
-        plt.semilogy(f - Fs/2, np.fft.fftshift(Pxx))
-        plt.title("Spectrum")
-        plt.xlabel("Frequency (Hz)")
-        plt.ylabel("Power/Frequency (dB/Hz)")
-        freq_plot = encode_plot()
-        plt.close()
+            # Generate sample time domain data
+            # Simple example: create a sine wave based on bits
+            time_domain_data = []
+            for i, bit in enumerate(sample_data):
+                val = math.sin(2 * math.pi * i / bits_per_symbol) + int(bit)
+                time_domain_data.append(val)
 
-        plt.figure(figsize=(4, 4))
-        plt.scatter(np.real(signal_out[::8]), np.imag(signal_out[::8]), s=5)
-        plt.title("Constellation Diagram")
-        plt.xlabel("In-phase")
-        plt.ylabel("Quadrature")
-        constellation_plot = encode_plot()
-        plt.close()
+    return render_template(
+        "index.html",
+        mod_type=mod_type,
+        mod_order=mod_order,
+        snr=snr,
+        target_data_rate=target_data_rate,
+        sample_data=sample_data,
+        auto_compute=auto_compute,
+        calc_values=calc_values,
+        standard_values=standard_values,
+        time_domain_data=time_domain_data
+    )
 
-        ber = theoretical_ber(mod_type, snr, M)
-
-        return jsonify({
-            'time_plot': time_plot,
-            'freq_plot': freq_plot,
-            'constellation_plot': constellation_plot,
-            'ber': float(ber),
-            'bw': bw,
-            'bps': required_bits_per_symbol,
-            'bps_actual': actual_bits_per_symbol,
-            'data_rate': target_data_rate,
-            'baud': round(baud_rate),
-            'rsnr': round(10 * np.log10(1 / ber), 2),
-            'rChannelBW': bw,
-            'throughput': round(target_data_rate / 1e9, 2)
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)})
-
-@app.route('/ber_curve', methods=['POST'])
-def ber_curve():
-    try:
-        mod_type = request.form['mod_type']
-        M = int(request.form.get('mod_order', 2))
-        snrs = np.arange(0, 11)
-        bers = [theoretical_ber(mod_type, snr, M) for snr in snrs]
-
-        plt.figure(figsize=(5, 3))
-        plt.semilogy(snrs, bers, marker='o')
-        plt.title("BER vs. SNR")
-        plt.xlabel("SNR (dB)")
-        plt.ylabel("Bit Error Rate")
-        plt.grid(True, which='both')
-        ber_plot = encode_plot()
-        plt.close()
-
-        return jsonify({'ber_curve': ber_plot})
-    except Exception as e:
-        return jsonify({'error': str(e)})
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)
