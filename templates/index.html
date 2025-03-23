@@ -9,7 +9,6 @@
             padding: 0;
             font-family: Arial, sans-serif;
         }
-        /* Input Section Styles */
         .input-section {
             padding: 10px;
             border: 1px solid #ccc;
@@ -28,7 +27,6 @@
         .full-width {
             grid-column: 1 / -1;
         }
-        /* Chart Section styles remain unchanged */
         .chart-container {
             display: flex;
             flex-wrap: wrap;
@@ -49,6 +47,19 @@
         .chart-row .chart-box {
             width: 48%;
         }
+        /* Align radio bullets with labels */
+        .radio-label {
+            display: flex;             /* align radio button and label horizontally */
+            align-items: center;      /* vertically center the label and radio button */
+            justify-content: flex-start; /* left-align them horizontally */
+            margin: 2px 0;
+          }
+        .radio-label input[type="radio"] {
+          margin-right: 5px;
+        }
+        .radio-label label {
+          margin-left: 5px;
+        }
     </style>
 </head>
 <body>
@@ -56,15 +67,31 @@
         <div class="input-section">
             <h3>Input Section</h3>
             <div class="input-grid">
-                <!-- Left Column: Modulation type -->
+                <!-- Left Column: Modulation type (aligned bullets) -->
                 <div>
-                    <label>Type of Digital Modulation:</label>
-                    <input type="radio" name="mod_type" value="QAM" {% if mod_type == 'QAM' %}checked{% endif %}> QAM<br>
-                    <input type="radio" name="mod_type" value="PSK" {% if mod_type == 'PSK' %}checked{% endif %}> PSK<br>
-                    <input type="radio" name="mod_type" value="FSK" {% if mod_type == 'FSK' %}checked{% endif %}> FSK<br>
-                    <input type="radio" name="mod_type" value="ASK" {% if mod_type == 'ASK' %}checked{% endif %}> ASK<br>
-                    <input type="radio" name="mod_type" value="CSS" {% if mod_type == 'CSS' %}checked{% endif %}> CSS<br>
+                    <label>Type of Digital Modulation:</label><br>
+                    <label class="radio-label">
+                        <input type="radio" name="mod_type" value="QAM"  {% if mod_type == 'QAM' %}checked{% endif %}>
+                        QAM
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="mod_type" value="PSK"  {% if mod_type == 'PSK' %}checked{% endif %}>
+                        PSK
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="mod_type" value="FSK"  {% if mod_type == 'FSK' %}checked{% endif %}>
+                        FSK
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="mod_type" value="ASK"  {% if mod_type == 'ASK' %}checked{% endif %}>
+                        ASK
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="mod_type" value="CSS"  {% if mod_type == 'CSS' %}checked{% endif %}>
+                        CSS
+                    </label>
                 </div>
+
                 <!-- Right Column: Order, SNR, and Target Data Rate -->
                 <div>
                     <label>Modulation Order (2^x):</label>
@@ -75,9 +102,11 @@
                     </select>
                     <label>SNR (dB):</label>
                     <input type="number" step="0.01" name="snr" value="{{snr}}">
+
                     <label>Target Data Rate (Mbps):</label>
                     <input type="number" step="0.01" name="target_data_rate" value="{{target_data_rate}}">
                 </div>
+
                 <!-- Full width: Sample Data -->
                 <div class="full-width">
                     <label>Sample Data Stream (bits):</label>
@@ -94,7 +123,7 @@
         </div>
     </form>
 
-    <div style="border:1px solid #ccc; padding:10px; margin-top:10px;">
+    <div style="border:1px solid #ccc; padding:10px;">
         <h3>Result Section</h3>
         <div style="display:flex; justify-content:space-around;">
             <div>
@@ -125,13 +154,14 @@
     <!-- Chart Section -->
     <div style="border:1px solid #ccc; padding:10px; margin-top:10px;">
         <h3>Chart Section</h3>
+
         <!-- 2x2 Grid for four charts -->
         <div class="chart-container">
             <!-- Time Domain Chart with Time Axis -->
             <div class="chart-box">
                 <canvas id="timeDomainChart"></canvas>
             </div>
-            <!-- Frequency Spectrum Chart -->
+            <!-- Frequency Spectrum Chart (Welch) -->
             <div class="chart-box">
                 <canvas id="freqChart"></canvas>
             </div>
@@ -139,27 +169,29 @@
             <div class="chart-box">
                 <canvas id="berSNRChart"></canvas>
             </div>
-            <!-- Constellation Chart with Cross Lines -->
+            <!-- Constellation Chart -->
             <div class="chart-box">
-                <canvas id="constellationChart"></canvas>
+              <canvas id="snrThroughputChart"></canvas>
+                
             </div>
         </div>
-        <!-- Row for Noise and Index Domain Charts -->
+
+        <!-- Row for Noise and SNR-vs-Throughput Charts -->
         <div class="chart-row">
             <div class="chart-box">
                 <canvas id="noiseChart"></canvas>
             </div>
             <div class="chart-box">
-                <canvas id="indexDomainChart"></canvas>
+              <canvas id="constellationChart"></canvas>
             </div>
         </div>
     </div>
 
     <script>
-        // Time Domain Chart (x-axis: Time in seconds)
-        var timeCtx = document.getElementById('timeDomainChart').getContext('2d');
-        var timeData = {{ time_domain_data|safe }};
-        var timeValues = {{ time_values|safe }};
+        // Time Domain Chart
+        const timeData = {{ time_domain_data|safe }};
+        const timeValues = {{ time_values|safe }};
+        const timeCtx = document.getElementById('timeDomainChart').getContext('2d');
         new Chart(timeCtx, {
             type: 'line',
             data: {
@@ -182,18 +214,20 @@
         });
 
         // Frequency Spectrum Chart
-        var freqCtx = document.getElementById('freqChart').getContext('2d');
-        var freqData = {{ freq_data|safe }};
-        var freqLabels = freqData.map(d => d.freq);
-        var freqAmps = freqData.map(d => d.amp);
+        // freqData => array of objects {freq, amp}, amp is in dB/Hz
+        const freqDataRaw = {{ freq_data|safe }};
+        const freqLabels = freqDataRaw.map(d => d.freq);
+        const freqVals = freqDataRaw.map(d => d.amp);
+        const freqCtx = document.getElementById('freqChart').getContext('2d');
         new Chart(freqCtx, {
-            type: 'bar',
+            type: 'line',
             data: {
                 labels: freqLabels,
                 datasets: [{
-                    label: 'Spectrum Amplitude',
-                    data: freqAmps,
-                    backgroundColor: 'orange'
+                    label: 'Power Spectral Density (dB/Hz)',
+                    data: freqVals,
+                    borderColor: 'orange',
+                    fill: false
                 }]
             },
             options: {
@@ -201,20 +235,20 @@
                 plugins: { legend: { display: true } },
                 scales: {
                     x: { title: { display: true, text: 'Frequency (Hz)' } },
-                    y: { title: { display: true, text: 'Amplitude' } }
+                    y: { title: { display: true, text: 'PSD (dB/Hz)' } }
                 }
             }
         });
 
         // BER vs SNR Chart
-        var berCtx = document.getElementById('berSNRChart').getContext('2d');
-        var berData = {{ ber_snr_data|safe }};
-        var snrLabels = berData.map(d => d.snr);
-        var berVals = berData.map(d => d.ber);
+        const berData = {{ ber_snr_data|safe }};
+        const berLabels = berData.map(d => d.snr);
+        const berVals = berData.map(d => d.ber);
+        const berCtx = document.getElementById('berSNRChart').getContext('2d');
         new Chart(berCtx, {
             type: 'line',
             data: {
-                labels: snrLabels,
+                labels: berLabels,
                 datasets: [{
                     label: 'BER vs. SNR',
                     data: berVals,
@@ -227,15 +261,65 @@
                 plugins: { legend: { display: true } },
                 scales: {
                     x: { title: { display: true, text: 'SNR (dB)' } },
-                    y: { type: 'logarithmic', title: { display: true, text: 'Bit Error Rate' } }
+                    y: {
+                        type: 'logarithmic',
+                        title: { display: true, text: 'Bit Error Rate' }
+                    }
                 }
             }
         });
 
-        // Constellation Chart with center cross lines
-        var constCtx = document.getElementById('constellationChart').getContext('2d');
-        var constData = {{ constellation_data|safe }};
-        var scatterData = constData.map(point => ({x: point.x, y: point.y}));
+        // SNR vs. Throughput Chart
+        const snrThrData = {{ snr_throughput_data|safe }};
+        const snrThrLabels = snrThrData.map(d => d.snr);
+        const thrVals = snrThrData.map(d => d.throughput);
+        const snrThrCtx = document.getElementById('snrThroughputChart').getContext('2d');
+        new Chart(snrThrCtx, {
+            type: 'line',
+            data: {
+                labels: snrThrLabels,
+                datasets: [{
+                    label: 'SNR vs. Throughput',
+                    data: thrVals,
+                    borderColor: 'blue',
+                    fill: false
+                }]
+            },
+            options: {
+                maintainAspectRatio: false,
+                plugins: { legend: { display: true } },
+                scales: {
+                    x: { title: { display: true, text: 'SNR (dB)' } },
+                    y: { title: { display: true, text: 'Throughput (Mbps)' } }
+                }
+            }
+        });
+
+        // Constellation Chart
+        const constData = {{ constellation_data|safe }};
+        const scatterData = constData.map(point => ({x: point.x, y: point.y}));
+        // Cross lines
+        const crossLines = [
+            {
+                label: 'Horizontal Axis',
+                type: 'line',
+                data: [{x: -2, y: 0}, {x: 2, y: 0}],
+                borderColor: 'black',
+                borderDash: [5, 5],
+                fill: false,
+                pointRadius: 0
+            },
+            {
+                label: 'Vertical Axis',
+                type: 'line',
+                data: [{x: 0, y: -2}, {x: 0, y: 2}],
+                borderColor: 'black',
+                borderDash: [5, 5],
+                fill: false,
+                pointRadius: 0
+            }
+        ];
+        const constCtx = document.getElementById('constellationChart').getContext('2d');
         new Chart(constCtx, {
             type: 'scatter',
             data: {
@@ -244,26 +328,8 @@
                         label: 'Constellation Points',
                         data: scatterData,
                         pointBackgroundColor: 'red'
-                    },
-                    {
-                        label: 'Horizontal Axis',
-                        type: 'line',
-                        data: [{x: -2, y: 0}, {x: 2, y: 0}],
-                        borderColor: 'black',
-                        borderDash: [5, 5],
-                        fill: false,
-                        pointRadius: 0
-                    },
-                    {
-                        label: 'Vertical Axis',
-                        type: 'line',
-                        data: [{x: 0, y: -2}, {x: 0, y: 2}],
-                        borderColor: 'black',
-                        borderDash: [5, 5],
-                        fill: false,
-                        pointRadius: 0
                     }
-                ]
+                ].concat(crossLines)
             },
             options: {
                 maintainAspectRatio: false,
@@ -275,18 +341,35 @@
             }
         });
 
-        // Acceptable Noise Level Chart (with random tolerance)
-        var noiseCtx = document.getElementById('noiseChart').getContext('2d');
-        var noiseData = {{ noise_data|safe }};
-        var noiseScatter = noiseData.map(n => ({x: n.x, y: n.y}));
+        // Noise Boundary Chart
+        // noiseData => array of objects:
+        //    { label: "Tolerance Circle i", center: {x, y}, points: [ {x, y}, ..., {x, y} ] }
+        const noiseRaw = {{ noise_data|safe }};
+        const noiseDatasets = [];
+        noiseRaw.forEach(obj => {
+            // Circle points
+            noiseDatasets.push({
+                label: obj.label,
+                data: obj.points.map(p => ({x: p.x, y: p.y})),
+                showLine: true,
+                borderColor: 'purple',
+                backgroundColor: 'rgba(0,0,0,0)',  // no fill
+                pointRadius: 0
+            });
+            // Center point
+            noiseDatasets.push({
+                label: 'Center ' + obj.label,
+                data: [{x: obj.center.x, y: obj.center.y}],
+                pointBackgroundColor: 'purple',
+                pointRadius: 3,
+                showLine: false
+            });
+        });
+        const noiseCtx = document.getElementById('noiseChart').getContext('2d');
         new Chart(noiseCtx, {
             type: 'scatter',
             data: {
-                datasets: [{
-                    label: 'Acceptable Noise Boundary',
-                    data: noiseScatter,
-                    pointBackgroundColor: 'purple'
-                }]
+                datasets: noiseDatasets
             },
             options: {
                 maintainAspectRatio: false,
@@ -298,30 +381,7 @@
             }
         });
 
-        // Index Domain Chart (x-axis: Sample Index)
-        var indexCtx = document.getElementById('indexDomainChart').getContext('2d');
-        var indexData = {{ time_domain_data|safe }};
-        var indexLabels = {{ index_labels|safe }};
-        new Chart(indexCtx, {
-            type: 'line',
-            data: {
-                labels: indexLabels,
-                datasets: [{
-                    label: 'Time Domain Signal (Index)',
-                    data: indexData,
-                    borderColor: 'blue',
-                    fill: false
-                }]
-            },
-            options: {
-                maintainAspectRatio: false,
-                plugins: { legend: { display: true } },
-                scales: {
-                    x: { title: { display: true, text: 'Sample Index' } },
-                    y: { title: { display: true, text: 'Amplitude' } }
-                }
-            }
-        });
+        
 
         // Auto compute on changes
         document.querySelectorAll('input[type="number"], input[type="text"], select').forEach(el => {
