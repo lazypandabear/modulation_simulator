@@ -36,48 +36,156 @@ STANDARD_VALUES = {
     }
 }
 
-def compute_required_snr(mod_type, mod_order, target_ser=1e-3):
+import math
+from scipy.special import erfcinv
+
+def compute_required_snr(mod_type, mod_order, bits_per_symbol, target_ser=1e-3):
     """
-    Compute the required SNR (in dB) for a given modulation technique based on a target symbol error rate.
+    Compute the required SNR (in dB) for a given modulation type and modulation order,
+    based on an approximate target symbol error rate (SER).
+    
+    Supported mod_type: 'QAM', 'PSK', 'FSK'.
+    For QAM and PSK, we use Q-function approximations.
+    For FSK, we use a non-coherent M-ary FSK approximation.
     
     Parameters:
-        mod_type (str): Modulation type ('QAM' or 'PSK').
-        mod_order (int): Modulation order (M), e.g., 1024.
-        target_ser (float): Target symbol error rate (default: 1e-3).
-        
+        mod_type (str): 'QAM', 'PSK', 'FSK' (case-insensitive).
+        mod_order (int): e.g., 16, 64, 1024, etc.
+        target_ser (float): desired symbol error rate. default=1e-3
+    
     Returns:
         float: Required SNR in dB.
     
-    Formulas:
-      For M-ary QAM (square QAM):
-      
-          SNR_req_linear ≈ (M - 1)/3 * [Q⁻¹(target_ser / (4(1 - 1/√M)))]²
-          
-          where Q⁻¹(x) = √2 * erfcinv(2*x)
-          
-      For M-ary PSK:
-      
-          SNR_req_linear ≈ [Q⁻¹(target_ser / 2) / (√2 * sin(π/M))]²
-          
-    Note: These formulas assume coherent detection, Gray coding, and ideal conditions.
+    Raises:
+        ValueError: If modulation type is not recognized or the formula fails.
     """
     mod_type = mod_type.upper()
-    if mod_type == "QAM":
-        M = mod_order
-        # Define the inverse Q-function: Qinv(x) = sqrt(2) * erfcinv(2*x)
-        Qinv = lambda x: math.sqrt(2) * erfcinv(2 * x)
-        # Compute numerator for the QAM formula
-        numerator = Qinv(target_ser / (4 * (1 - 1 / math.sqrt(M))))
-        snr_linear = (M - 1) / 3 * (numerator ** 2)
-    elif mod_type == "PSK":
-        M = mod_order
-        Qinv = lambda x: math.sqrt(2) * erfcinv(2 * x)
-        snr_linear = (Qinv(target_ser / 2) / (math.sqrt(2) * math.sin(math.pi / M))) ** 2
-    else:
-        raise ValueError("Modulation type not supported. Use 'QAM' or 'PSK'.")
     
-    snr_db = 10 * math.log10(snr_linear)
-    return snr_db
+    # Qinv helper for QAM/PSK
+    def Qinv(x):
+        # Q^-1(x) = sqrt(2)*erfcinv(2x)
+        from math import sqrt
+        from scipy.special import erfcinv
+        return math.sqrt(2) * erfcinv(2*x)
+    
+    if mod_type == "QAM":
+        # M-ary QAM formula:
+        # SNR_req_linear ≈ (M-1)/3 * [Q^-1( target_ser / (4(1-1/√M)) )]^2
+        M = mod_order
+        if M < 2:
+            raise ValueError("QAM order must be >= 2")
+        numerator = Qinv(target_ser / (4 * (1 - 1/math.sqrt(M))))
+        snr_linear = (M - 1)/3 * (numerator**2)
+        snr_db = 10*math.log10(snr_linear)
+        return snr_db
+    
+    elif mod_type == "PSK":
+        # M-ary PSK formula (approx):
+        # SNR_req_linear ≈ [ Q^-1( target_ser/2 ) / ( sqrt(2)*sin(pi/M) ) ]^2
+        M = mod_order
+        if M < 2:
+            raise ValueError("PSK order must be >= 2")
+        # Special case: if M=2 => BPSK
+        if M == 2:
+            # For BPSK, SER = BER, SER= Q(sqrt(2*SNR)), solve for SNR
+            # approximate symbol error = bit error
+            # SER = target_ser => Q^-1(target_ser) = sqrt(2*SNR)
+            # SNR = [Q^-1(target_ser)]^2 / 2
+            qv = Qinv(target_ser)
+            snr_linear = (qv**2)/2
+            return 10*math.log10(snr_linear)
+        else:
+            # M>2
+            qv = Qinv(target_ser/2)
+            denom = math.sqrt(2)*math.sin(math.pi/M)
+            snr_linear = (qv/denom)**2
+            return 10*math.log10(snr_linear)
+    
+    elif mod_type == "FSK":
+        # Non-coherent M-ary FSK approximation:
+        # SER ≈ (M-1)/2 * exp(-SNR/2).
+        # Solve for SNR given target_ser => exp(-SNR/2) = SER * 2/(M-1)
+        # => SNR = -2 ln(SER * 2/(M-1))
+        M = mod_order
+        if M < 2:
+            raise ValueError("FSK order must be >= 2")
+        # Solve for SNR in linear scale
+        # target_ser = (M-1)/2 * exp(-SNR/2)
+        # => exp(-SNR/2) = target_ser*2/(M-1)
+        argument = target_ser * 2.0/(M - 1)
+        if argument <= 0:
+            raise ValueError("Invalid target_ser or M-1 for FSK formula.")
+        # SNR must be positive => if argument >= 1 => negative or zero => no real solution
+        if argument >= 1:
+            # Means you'd need infinite SNR or we can't solve
+            # Return something large or handle gracefully
+            return float('inf')
+        # Otherwise:
+        snr_linear = -2 * math.log(argument)
+        # Convert to dB
+        snr_db = 10 * math.log10(snr_linear)
+        return snr_db
+    
+    elif mod_type == "ASK":
+        # Coherent M-ary ASK approximation:
+        # SER ≈ [(2*(M-1))/(M*log2(M))] * Q(sqrt(3*SNR_linear/(M^2-1)))
+        M = mod_order
+        if M < 2:
+            raise ValueError("ASK order must be >= 2")
+        
+        # Special case: if M=2 => Binary ASK
+        if M == 2:
+            # For Binary ASK, SER = Q(sqrt(SNR_linear))
+            # approximate symbol error = bit error
+            # SER = target_ser => Q^-1(target_ser) = sqrt(SNR_linear)
+            # SNR_linear = [Q^-1(target_ser)]^2
+            qv = Qinv(target_ser)
+            snr_linear = qv**2
+            return 10*math.log10(snr_linear)
+        else:
+            # M>2
+            # SER ≈ [(2*(M-1))/(M*log2(M))] * Q(sqrt(3*SNR_linear/(M^2-1)))
+            # Q(x) = 0.5 * erfc(x/sqrt(2))
+            # Qinv(x) = sqrt(2) * erfcinv(2*x)
+            # target_ser = [(2*(M-1))/(M*log2(M))] * Q(sqrt(3*SNR_linear/(M^2-1)))
+            # target_ser / [(2*(M-1))/(M*log2(M))] = Q(sqrt(3*SNR_linear/(M^2-1)))
+            # Qinv(target_ser / [(2*(M-1))/(M*log2(M))]) = sqrt(3*SNR_linear/(M^2-1))
+            # Qinv(target_ser / [(2*(M-1))/(M*log2(M))])^2 = 3*SNR_linear/(M^2-1)
+            # SNR_linear = (M^2-1) * Qinv(target_ser / [(2*(M-1))/(M*log2(M))])^2 / 3
+            
+            qv = Qinv(target_ser / ((2*(M-1))/(M*bits_per_symbol)))
+            snr_linear = ((M**2)-1) * (qv**2) / 3
+            return 10*math.log10(snr_linear)
+
+    elif mod_type == "CSS":
+        # Non-coherent CSS (LoRa-like) approximation:
+        # BER ≈ ((M-1) / (2 * SF)) * exp(-SNR_linear/2)
+        # where M = 2^SF
+        SF = bits_per_symbol  # Spreading factor is the number of bits per symbol
+        M = mod_order
+        if M < 2:
+            raise ValueError("CSS order must be >= 2")
+        
+        # Solve for SNR in linear scale
+        # target_ser = ((M-1) / (2 * SF)) * exp(-SNR/2)
+        # => exp(-SNR/2) = target_ser * (2 * SF) / (M-1)
+        argument = target_ser * (2 * SF) / (M - 1)
+        if argument <= 0:
+            raise ValueError("Invalid target_ser or M-1 for CSS formula.")
+        # SNR must be positive => if argument >= 1 => negative or zero => no real solution
+        if argument >= 1:
+            # Means you'd need infinite SNR or we can't solve
+            # Return something large or handle gracefully
+            return float('inf')
+        # Otherwise:
+        snr_linear = -2 * math.log(argument)
+        # Convert to dB
+        snr_db = 10 * math.log10(snr_linear)
+        return snr_db
+    
+    else:
+        raise ValueError("Modulation type not supported.")
+
 
 def get_constellation_points(mod_type, mod_order):
     """Deterministic set of constellation points (no randomness)."""
@@ -238,8 +346,17 @@ def index():
         else:
             # Basic parameters
             bandwidth_required = target_data_rate / bits_per_symbol
-            snr_req =  compute_required_snr(mod_type, mod_order, target_ser=1e-3) #simple computation is bits_per_symbol + 5 The extra 5 dB is an empirical margin that accounts for practical system losses, 
+            try:
+                # Attempt to compute required SNR
+                snr_req = compute_required_snr(mod_type, mod_order, bits_per_symbol, target_ser=1e-3)
+            except ValueError as e:
+                # If the function raises ValueError, store the message
+                calc_values["error"] = f"Failed to compute SNR: {str(e)}" 
+            
+            #simple computation is snr_req  = bits_per_symbol + 5 The extra 5 dB is an empirical margin that accounts for practical system losses, 
             #non-idealities, and other implementation factors. It provides a rough baseline to ensure that the SNR is sufficiently above the minimum required level for reliable detection.
+            
+            
             baud_rate = target_data_rate / bits_per_symbol
 
             # Effective throughput
