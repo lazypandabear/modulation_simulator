@@ -3,6 +3,9 @@ import random
 import numpy as np
 from scipy.signal import welch
 from flask import Flask, render_template, request
+from scipy.special import erfcinv
+from ber import compute_ber_bpsk, compute_ber_qam, compute_ber_ask, compute_ber_fsk, compute_ber_fsk_m, compute_ber_css
+from modulation import get_symbol_coord
 
 app = Flask(__name__)
 
@@ -32,6 +35,49 @@ STANDARD_VALUES = {
         4:  {"snr_req": 10, "bw_req": 19,  "bits_per_symbol": 2,  "baud_rate": 1e6, "throughput": 2e6}
     }
 }
+
+def compute_required_snr(mod_type, mod_order, target_ser=1e-3):
+    """
+    Compute the required SNR (in dB) for a given modulation technique based on a target symbol error rate.
+    
+    Parameters:
+        mod_type (str): Modulation type ('QAM' or 'PSK').
+        mod_order (int): Modulation order (M), e.g., 1024.
+        target_ser (float): Target symbol error rate (default: 1e-3).
+        
+    Returns:
+        float: Required SNR in dB.
+    
+    Formulas:
+      For M-ary QAM (square QAM):
+      
+          SNR_req_linear ≈ (M - 1)/3 * [Q⁻¹(target_ser / (4(1 - 1/√M)))]²
+          
+          where Q⁻¹(x) = √2 * erfcinv(2*x)
+          
+      For M-ary PSK:
+      
+          SNR_req_linear ≈ [Q⁻¹(target_ser / 2) / (√2 * sin(π/M))]²
+          
+    Note: These formulas assume coherent detection, Gray coding, and ideal conditions.
+    """
+    mod_type = mod_type.upper()
+    if mod_type == "QAM":
+        M = mod_order
+        # Define the inverse Q-function: Qinv(x) = sqrt(2) * erfcinv(2*x)
+        Qinv = lambda x: math.sqrt(2) * erfcinv(2 * x)
+        # Compute numerator for the QAM formula
+        numerator = Qinv(target_ser / (4 * (1 - 1 / math.sqrt(M))))
+        snr_linear = (M - 1) / 3 * (numerator ** 2)
+    elif mod_type == "PSK":
+        M = mod_order
+        Qinv = lambda x: math.sqrt(2) * erfcinv(2 * x)
+        snr_linear = (Qinv(target_ser / 2) / (math.sqrt(2) * math.sin(math.pi / M))) ** 2
+    else:
+        raise ValueError("Modulation type not supported. Use 'QAM' or 'PSK'.")
+    
+    snr_db = 10 * math.log10(snr_linear)
+    return snr_db
 
 def get_constellation_points(mod_type, mod_order):
     """Deterministic set of constellation points (no randomness)."""
@@ -160,7 +206,7 @@ def index():
     mod_type = "QAM"
     mod_order = 2
     snr = 10
-    target_data_rate = 1.0
+    target_data_rate = 100.0 # Mbps
     sample_data = "0"
     auto_compute = False
 
@@ -192,7 +238,8 @@ def index():
         else:
             # Basic parameters
             bandwidth_required = target_data_rate / bits_per_symbol
-            snr_req = bits_per_symbol + 5
+            snr_req =  compute_required_snr(mod_type, mod_order, target_ser=1e-3) #simple computation is bits_per_symbol + 5 The extra 5 dB is an empirical margin that accounts for practical system losses, 
+            #non-idealities, and other implementation factors. It provides a rough baseline to ensure that the SNR is sufficiently above the minimum required level for reliable detection.
             baud_rate = target_data_rate / bits_per_symbol
 
             # Effective throughput
@@ -205,7 +252,7 @@ def index():
                 "SNR Requirement": f"{snr_req:.2f} dB",
                 "Bandwidth Required": f"{bandwidth_required:.2f} MHz",
                 "Bits per Symbol": bits_per_symbol,
-                "Baud Rate": f"{baud_rate:.2f} symbols/s",
+                "Baud Rate": f"{baud_rate:.2f} Millions symbols/s",
                 "Effective Throughput": f"{effective_throughput:.2f} Mbps"
             }
 
@@ -274,30 +321,68 @@ def index():
                 freq_data = []
 
             # 2) BER vs SNR (placeholder)
+            '''
+            this is for simple approach
             ber_snr_data = []
             for i in range(5, 31, 5):
                 ber_val = 1.0 / (10**(i / 10))
-                ber_snr_data.append({"snr": i, "ber": ber_val})
+                ber_snr_data.append({"snr": i, "ber": ber_val})'''
+            
+            # Compute BER for the given modulation type and order
+            ber_snr_data = []
+            for snr_db in range(5, 31, 5):
+                if mod_type.upper() == "QAM":
+                    ber_val = compute_ber_qam(snr_db, mod_order)
+                elif mod_type.upper() == "PSK":
+                    if mod_order == 2:
+                        ber_val = compute_ber_bpsk(snr_db)
+                    else:
+                        # Extend for higher-order PSK if needed
+                        ber_val = compute_ber_bpsk(snr_db)  # As a simple approximation
+                elif mod_type.upper() == "ASK":
+                    ber_val = compute_ber_ask(snr_db)
+                elif mod_type.upper() == "FSK":
+                    if mod_order == 2:
+                        ber_val = compute_ber_fsk(snr_db)
+                    else:
+                        ber_val = compute_ber_fsk_m(snr_db, mod_order)
+                elif mod_type.upper() == "CSS":
+                    # Use the spreading factor for CSS; for instance, SF=7.
+                    SF = 7  # You may allow this to be an input parameter
+                    ber_val = compute_ber_css(snr_db, SF)
+                else:
+                    ber_val = 1.0 / (10 ** (snr_db / 10))  # fallback placeholder
+                
+                ber_snr_data.append({"snr": snr_db, "ber": float(ber_val)})
+
 
             # 3) Deterministic constellation
             constellation_data = get_constellation_points(mod_type, mod_order)
 
             # 4) Noise boundary:
-            #    For each constellation point, create a circle that indicates possible noise tolerance
-            #    We'll pick a fixed radius, e.g. 0.2
+            # Assume:
+            # - sample_data is a string containing the transmitted bit stream.
+            # - bits_per_symbol is computed as: bits_per_symbol = int(math.log2(mod_order))
+            # - get_symbol_coord(mod_type, symbol_bits) returns a tuple (x, y) for that symbol.
+
+            # Parse sample_data into symbols
+            parsed_symbols = [sample_data[i:i+bits_per_symbol] for i in range(0, len(sample_data), bits_per_symbol)]
+
             radius = 0.2
             noise_data = []
-            for idx, cpoint in enumerate(constellation_data):
+
+            for idx, symbol_bits in enumerate(parsed_symbols):
+                # Compute the (x, y) coordinate for the actual symbol using get_symbol_coord
+                cpoint = get_symbol_coord(mod_type, symbol_bits)
                 circle_points = []
                 for angle_deg in range(0, 361, 10):
                     angle = math.radians(angle_deg)
-                    x = cpoint["x"] + radius * math.cos(angle)
-                    y = cpoint["y"] + radius * math.sin(angle)
+                    x = cpoint[0] + radius * math.cos(angle)
+                    y = cpoint[1] + radius * math.sin(angle)
                     circle_points.append({"x": x, "y": y})
-                # We'll store each circle in a separate dataset
                 noise_data.append({
                     "label": f"Tolerance Circle {idx}",
-                    "center": cpoint,
+                    "center": {"x": cpoint[0], "y": cpoint[1]},
                     "points": circle_points
                 })
 
