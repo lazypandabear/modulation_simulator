@@ -393,42 +393,70 @@
     });
 
     // Noise Boundary Chart
+    // Example: improved styling for the Noise Tolerance Map
     const noiseRaw = {{ noise_data|safe }};
+
+    // We'll build two datasets per symbol:
+    // 1) A dashed circle with semitransparent fill
+    // 2) A center point with a bigger radius
     const noiseDatasets = [];
-    noiseRaw.forEach(obj => {
-        // Circle points
-        noiseDatasets.push({
-            label: obj.label,
-            data: obj.points.map(p => ({x: p.x, y: p.y})),
-            showLine: true,
-            borderColor: 'purple',
-            backgroundColor: 'rgba(0,0,0,0)',  // no fill
-            pointRadius: 0
-        });
-        // Center point
-        noiseDatasets.push({
-            label: 'Center ' + obj.label,
-            data: [{x: obj.center.x, y: obj.center.y}],
-            pointBackgroundColor: 'purple',
-            pointRadius: 3,
-            showLine: false
-        });
+
+    noiseRaw.forEach((obj, idx) => {
+    // Circle dataset
+    noiseDatasets.push({
+        label: `Symbol ${idx} Circle`,
+        data: obj.points.map(p => ({ x: p.x, y: p.y })),
+        showLine: true,
+        borderColor: 'purple',
+        borderDash: [5, 5], // dashed line
+        borderWidth: 2,
+        fill: true,
+        backgroundColor: 'rgba(128, 0, 128, 0.1)', // light purple fill
+        pointRadius: 0 // no visible points on the circle
     });
+    
+    // Center point dataset
+    noiseDatasets.push({
+        label: `Symbol ${idx} Center`,
+        data: [{ x: obj.center.x, y: obj.center.y }],
+        pointBackgroundColor: 'purple',
+        pointRadius: 6, // bigger point for emphasis
+        showLine: false
+    });
+    });
+
     const noiseCtx = document.getElementById('noiseChart').getContext('2d');
     new Chart(noiseCtx, {
-        type: 'scatter',
-        data: {
-            datasets: noiseDatasets
-        },
-        options: {
-            maintainAspectRatio: false,
-            plugins: { legend: { display: true } },
-            scales: {
-                x: { min: -2, max: 2, title: { display: true, text: 'X' } },
-                y: { min: -2, max: 2, title: { display: true, text: 'Y' } }
+    type: 'scatter',
+    data: {
+        datasets: noiseDatasets
+    },
+    options: {
+        maintainAspectRatio: false,
+        plugins: {
+        legend: {
+            display: true,
+            labels: {
+            // Optionally, use pointStyle icons instead of rectangles
+            usePointStyle: true
             }
         }
+        },
+        scales: {
+        x: {
+            min: -2,
+            max: 2,
+            title: { display: true, text: 'X' }
+        },
+        y: {
+            min: -2,
+            max: 2,
+            title: { display: true, text: 'Y' }
+        }
+        }
+    }
     });
+
 
     // Auto compute on changes
     document.querySelectorAll('input[type="number"], input[type="text"], select').forEach(el => {

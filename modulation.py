@@ -26,16 +26,16 @@ def get_symbol_coord(mod_type, symbol_bits):
     if mod_type == "QAM":
         # For QAM, if more than one bit is available, split the bits equally for I and Q.
         if bits_len >= 2:
-            half = bits_len // 2
-            I_bits = symbol_bits[:half]
-            Q_bits = symbol_bits[half:]
-            I_val = int(I_bits, 2)
-            Q_val = int(Q_bits, 2) if Q_bits else 0
-            I_max = (2**len(I_bits) - 1) if len(I_bits) > 0 else 1
-            Q_max = (2**len(Q_bits) - 1) if len(Q_bits) > 0 else 1
+            half = bits_len // 2 # Split the bits into two halves
+            I_bits = symbol_bits[:half] # First half for I
+            Q_bits = symbol_bits[half:] # Second half for Q
+            I_val = int(I_bits, 2)  # Convert bits to integer
+            Q_val = int(Q_bits, 2) if Q_bits else 0 # Convert bits to integer
+            I_max = (2**len(I_bits) - 1) if len(I_bits) > 0 else 1 # Max value for normalization
+            Q_max = (2**len(Q_bits) - 1) if len(Q_bits) > 0 else 1 # Max value for normalization
             # Map to [-1, 1]
-            I_amp = 2 * I_val / I_max - 1 if I_max != 0 else 0
-            Q_amp = 2 * Q_val / Q_max - 1 if Q_max != 0 else 0
+            I_amp = 2 * I_val / I_max - 1 if I_max != 0 else 0  # Normalize to [-1, 1]
+            Q_amp = 2 * Q_val / Q_max - 1 if Q_max != 0 else 0   # Normalize to [-1, 1]
             # Return (I, Q) with Q inverted to match common convention
             return (I_amp, -Q_amp)
         else:
