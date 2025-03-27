@@ -241,55 +241,94 @@
 
 <script>
     // Time Domain Chart
-    const timeData = {{ time_domain_data|safe }};
-    const timeValues = {{ time_values|safe }};
-    const timeCtx = document.getElementById('timeDomainChart').getContext('2d');
-    new Chart(timeCtx, {
-        type: 'line',
-        data: {
-            labels: timeValues,
-            datasets: [{
-                label: 'Time Domain Signal (Time in sec)',
-                data: timeData,
-                borderColor: 'blue',
-                fill: false
-            }]
-        },
-        options: {
-            maintainAspectRatio: false,
-            plugins: { legend: { display: true } },
-            scales: {
-                x: { title: { display: true, text: 'Time (s)' } },
-                y: { title: { display: true, text: 'Amplitude' } }
-            }
-        }
-    });
+        const timeData = {{ time_domain_data|safe }};
+        const timeValues = {{ time_values|safe }};
 
-    // Frequency Spectrum Chart
+                // Build an array of {x, y} points
+        const timePoints = timeValues.map((t, i) => ({
+            x: t,
+            y: timeData[i]
+        }));
+        //console.log("Time Values from server:", timeValues);  // Debug output
+        const timeCtx = document.getElementById('timeDomainChart').getContext('2d');
+        new Chart(timeCtx, {
+    type: 'line',
+    data: {
+      // No separate labels array here. We store everything in "datasets"
+      datasets: [{
+        label: 'Time Domain Signal (Time in sec)',
+        data: timePoints,    // Our array of {x, y} points
+        borderColor: 'blue',
+        fill: false
+      }]
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: { legend: { display: true } },
+      scales: {
+        x: {
+          type: 'linear',  // Ensure a numeric axis
+          title: { display: true, text: 'Time (s)' },
+          ticks: {
+            // If you want scientific notation:
+            callback: function(value, index, ticks) {
+              return Number(value).toExponential(2);
+            }
+          }
+        },
+        y: {
+          title: { display: true, text: 'Amplitude' }
+        }
+      }
+    }
+  });
+
+
+    // Frequency Spectrum Chart (linear x-axis)
     const freqDataRaw = {{ freq_data|safe }};
-    const freqLabels = freqDataRaw.map(d => d.freq);
-    const freqVals = freqDataRaw.map(d => d.amp);
+
+    // Convert freqDataRaw into an array of { x, y } objects
+    // e.g., if freq_data looks like [{freq: 10, amp: -40}, {freq: 20, amp: -45}, ...]
+    const freqPoints = freqDataRaw.map(d => ({
+    x: d.freq,
+    y: d.amp
+    }));
+
     const freqCtx = document.getElementById('freqChart').getContext('2d');
     new Chart(freqCtx, {
-        type: 'line',
-        data: {
-            labels: freqLabels,
-            datasets: [{
-                label: 'Power Spectral Density (dB/Hz)',
-                data: freqVals,
-                borderColor: 'orange',
-                fill: false
-            }]
-        },
-        options: {
-            maintainAspectRatio: false,
-            plugins: { legend: { display: true } },
-            scales: {
-                x: { title: { display: true, text: 'Frequency (Hz)' } },
-                y: { title: { display: true, text: 'PSD (dB/Hz)' } }
+    type: 'line',
+    data: {
+        // Instead of labels + data, pass a single dataset with {x, y} points
+        datasets: [{
+        label: 'Power Spectral Density (dB/Hz)',
+        data: freqPoints,
+        borderColor: 'orange',
+        fill: false
+        }]
+    },
+    options: {
+        maintainAspectRatio: false,
+        plugins: { legend: { display: true } },
+        scales: {
+        x: {
+            // Force a numeric (linear) scale on the x-axis
+            type: 'linear',
+            title: { display: true, text: 'Frequency (Hz)' },
+            ticks: {
+            // Example: round the frequency tick labels
+            callback: function(value, index, ticks) {
+                return Math.round(value);
             }
+            }
+        },
+        y: {
+            title: { display: true, text: 'PSD (dB/Hz)' }
         }
+        }
+    }
     });
+
+
 
     // BER vs SNR Chart
     const berData = {{ ber_snr_data|safe }};
@@ -314,11 +353,17 @@
                 x: { title: { display: true, text: 'SNR (dB)' } },
                 y: {
                     type: 'logarithmic',
-                    title: { display: true, text: 'Bit Error Rate' }
+                    title: { display: true, text: 'Bit Error Rate' },
+                    ticks: {
+                        callback: function(value, index, ticks) {
+                            return Number(value).toExponential(2);
+                        }
+                    }
                 }
             }
         }
     });
+
 
     // SNR vs. Throughput Chart
     const snrThrData = {{ snr_throughput_data|safe }};
