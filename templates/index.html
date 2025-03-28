@@ -272,19 +272,25 @@
 <script>
 
 function generateRandomBits() {
-  // Retrieve bits_per_symbol from the hidden input
-  const bitsPerSymbol = parseInt(document.getElementById("bitsPerSymbol").value, 10);
+  // Get the modulation order from the select input
+  const modOrderElem = document.querySelector('select[name="mod_order"]');
+  const modOrder = parseInt(modOrderElem.value, 10);
   
-  // Generate exactly bitsPerSymbol random bits (0 or 1)
+  // Compute bits per symbol = log2(modOrder)
+  let bitsPerSymbol = Math.log2(modOrder);
+  bitsPerSymbol = Math.floor(bitsPerSymbol); // ensure an integer value
+  
+  // Generate a string with exactly bitsPerSymbol random bits
   let newBits = "";
   for (let i = 0; i < bitsPerSymbol; i++) {
     newBits += Math.random() < 0.5 ? "0" : "1";
   }
   
-  // Append these random bits to the sample_data input field
+  // Append the new bits to the sample data input field
   const sampleInput = document.querySelector('input[name="sample_data"]');
   sampleInput.value += newBits;
 }
+
 
 function clearBits() {
   // Simply clear the sample_data input
