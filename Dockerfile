@@ -18,5 +18,8 @@ EXPOSE 5000
 ENV FLASK_APP=sims.py
 ENV FLASK_RUN_HOST=0.0.0.0
 
-# Run the Flask application.
-CMD ["python", "-m", "flask", "run"]
+# Install gunicorn
+RUN pip install gunicorn
+
+# Run the Flask application using gunicorn.
+CMD ["gunicorn", "--workers", "3", "--timeout", "120", "--bind", "0.0.0.0:5000", "sims:app"]
