@@ -15,29 +15,43 @@ STANDARD_VALUES = {
         4:  {"snr_req": 12, "bw_req": 20,  "bits_per_symbol": 2,  "baud_rate": 1e6, "throughput": 2e6},
         8:  {"snr_req": 16, "bw_req": 30,  "bits_per_symbol": 3,  "baud_rate": 1e6, "throughput": 3e6},
         16: {"snr_req": 20, "bw_req": 40,  "bits_per_symbol": 4,  "baud_rate": 1e6, "throughput": 4e6},
-        32: {"snr_req": 24, "bw_req": 50,  "bits_per_symbol": 5,  "baud_rate": 1e6, "throughput": 5e6}
+        32: {"snr_req": 24, "bw_req": 50,  "bits_per_symbol": 5,  "baud_rate": 1e6, "throughput": 5e6},
+        64: {"snr_req": 26, "bw_req": 60, "bits_per_symbol": 6, "baud_rate": 1e6, "throughput": 6e6},
+        128: {"snr_req": 28, "bw_req": 70, "bits_per_symbol": 7, "baud_rate": 1e6, "throughput": 7e6},
+        256: {"snr_req": 30, "bw_req": 80, "bits_per_symbol": 8, "baud_rate": 1e6, "throughput": 8e6},
+        512: {"snr_req": 32, "bw_req": 90, "bits_per_symbol": 9, "baud_rate": 1e6, "throughput": 9e6},
+        1024: {"snr_req": 34, "bw_req": 100, "bits_per_symbol": 10, "baud_rate": 1e6, "throughput": 10e6},
     },
     "PSK": {
         2:  {"snr_req": 9,  "bw_req": 15,  "bits_per_symbol": 1,  "baud_rate": 1e6, "throughput": 1e6},
         4:  {"snr_req": 13, "bw_req": 25,  "bits_per_symbol": 2,  "baud_rate": 1e6, "throughput": 2e6},
-        8:  {"snr_req": 17, "bw_req": 35,  "bits_per_symbol": 3,  "baud_rate": 1e6, "throughput": 3e6}
+        8:  {"snr_req": 17, "bw_req": 35,  "bits_per_symbol": 3,  "baud_rate": 1e6, "throughput": 3e6},
+        16: {"snr_req": 21, "bw_req": 45, "bits_per_symbol": 4, "baud_rate": 1e6, "throughput": 4e6},
+        32: {"snr_req": 25, "bw_req": 55, "bits_per_symbol": 5, "baud_rate": 1e6, "throughput": 5e6},
+        64: {"snr_req": 29, "bw_req": 65, "bits_per_symbol": 6, "baud_rate": 1e6, "throughput": 6e6},
+        128: {"snr_req": 33, "bw_req": 75, "bits_per_symbol": 7, "baud_rate": 1e6, "throughput": 7e6},
+        256: {"snr_req": 37, "bw_req": 85, "bits_per_symbol": 8, "baud_rate": 1e6, "throughput": 8e6},
     },
     "FSK": {
         2:  {"snr_req": 7,  "bw_req": 12,  "bits_per_symbol": 1,  "baud_rate": 1e6, "throughput": 1e6},
-        4:  {"snr_req": 11, "bw_req": 22,  "bits_per_symbol": 2,  "baud_rate": 1e6, "throughput": 2e6}
+        4:  {"snr_req": 11, "bw_req": 22,  "bits_per_symbol": 2,  "baud_rate": 1e6, "throughput": 2e6},
+        8: {"snr_req": 15, "bw_req": 32, "bits_per_symbol": 3, "baud_rate": 1e6, "throughput": 3e6},
+        16: {"snr_req": 19, "bw_req": 42, "bits_per_symbol": 4, "baud_rate": 1e6, "throughput": 4e6},
     },
     "ASK": {
         2:  {"snr_req": 10, "bw_req": 18,  "bits_per_symbol": 1,  "baud_rate": 1e6, "throughput": 1e6},
-        4:  {"snr_req": 14, "bw_req": 28,  "bits_per_symbol": 2,  "baud_rate": 1e6, "throughput": 2e6}
+        4:  {"snr_req": 14, "bw_req": 28,  "bits_per_symbol": 2,  "baud_rate": 1e6, "throughput": 2e6},
+        8: {"snr_req": 18, "bw_req": 38, "bits_per_symbol": 3, "baud_rate": 1e6, "throughput": 3e6},
+        16: {"snr_req": 22, "bw_req": 48, "bits_per_symbol": 4, "baud_rate": 1e6, "throughput": 4e6},
     },
     "CSS": {
         2:  {"snr_req": 6,  "bw_req": 9,   "bits_per_symbol": 1,  "baud_rate": 1e6, "throughput": 1e6},
-        4:  {"snr_req": 10, "bw_req": 19,  "bits_per_symbol": 2,  "baud_rate": 1e6, "throughput": 2e6}
+        4:  {"snr_req": 10, "bw_req": 19,  "bits_per_symbol": 2,  "baud_rate": 1e6, "throughput": 2e6},
+        8:  {"snr_req": 14, "bw_req": 29, "bits_per_symbol": 3, "baud_rate": 1e6, "throughput": 3e6},
+        16: {"snr_req": 18, "bw_req": 39, "bits_per_symbol": 4, "baud_rate": 1e6, "throughput": 4e6},
     }
 }
 
-import math
-from scipy.special import erfcinv
 
 def compute_required_snr(mod_type, mod_order, bits_per_symbol, target_ser=1e-3):
     """
@@ -311,8 +325,8 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    mod_type = "QAM"
-    mod_order = 2
+    mod_type = request.form.get("mod_type", "QAM")
+    mod_order = int(request.form.get("mod_order", 2))
     snr = 10
     target_data_rate = 100.0 # Mbps
     sample_data = "0"
@@ -328,15 +342,17 @@ def index():
     noise_data = []
     snr_throughput_data = []
 
+    mod_type = request.form.get("mod_type", "QAM")
+    mod_order = int(request.form.get("mod_order", 2))
+    bits_per_symbol = int(math.log2(mod_order))  # for example
+    print(bits_per_symbol)
     if request.method == 'POST':
-        mod_type = request.form.get("mod_type", "QAM")
-        mod_order = int(request.form.get("mod_order", 2))
+
         snr = float(request.form.get("snr", 10))
         target_data_rate = float(request.form.get("target_data_rate", 1.0))
         sample_data = request.form.get("sample_data", "")
         auto_compute = request.form.get("auto_compute") == "on"
 
-        bits_per_symbol = int(math.log2(mod_order))
 
         # Validate input bits
         if len(sample_data) % bits_per_symbol != 0 or any(ch not in ['0','1'] for ch in sample_data):
@@ -516,6 +532,7 @@ def index():
         "index.html",
         mod_type=mod_type,
         mod_order=mod_order,
+        bits_per_symbol=bits_per_symbol,
         snr=snr,
         target_data_rate=target_data_rate,
         sample_data=sample_data,

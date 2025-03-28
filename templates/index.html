@@ -9,6 +9,7 @@
     >
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
     <style>
         /* Optional: Some custom overrides or additional styling */
         body {
@@ -31,6 +32,7 @@
     <!-- Input Section -->
     <h3 class="mb-3">Input Section</h3>
     <form method="POST">
+        
         <div class="row mb-3">
             <!-- Left Column: Modulation Type -->
             <div class="col-md-6">
@@ -103,6 +105,27 @@
                         </label>
                     </div>
                 </div>
+            <div class="row">
+                    <div class="col-md-12">
+                      <!-- Second Row Content -->
+                      <div class="bg-light border p-3">
+                                <!-- Google AdSense Ad Unit -->
+                            <div style="margin: 1rem 0;">
+                                <!-- Example AdSense code snippet -->
+                            <!-- google_ad_sense_dennis_garcia_ad_unit -->
+                            <ins class="adsbygoogle"
+                                style="display:block"
+                                data-ad-client="ca-pub-6021065792371731"
+                                data-ad-slot="1643014458"
+                                data-ad-format="auto"
+                                data-full-width-responsive="true"></ins>
+                            <script>
+                                (adsbygoogle = window.adsbygoogle || []).push({});
+                            </script>
+                            </div>
+                      </div>
+                    </div>
+                  </div>
             </div>
 
             <!-- Right Column: Order, SNR, and Target Data Rate -->
@@ -143,16 +166,19 @@
             </div>
         </div>
 
+
+
         <!-- Full width: Sample Data -->
         <div class="mb-3">
             <label class="form-label">Sample Data Stream (bits):</label>
-            <input 
-              type="text" 
-              class="form-control"
-              name="sample_data" 
-              value="{{sample_data}}"
-            >
-        </div>
+            <div class="input-group">
+              <input type="text" class="form-control" name="sample_data" value="{{ sample_data }}" placeholder="Enter bits here">
+              <!-- Hidden input to store bits_per_symbol -->
+              <input type="hidden" id="bitsPerSymbol" value="{{ bits_per_symbol }}">
+              <button type="button" class="btn btn-secondary" onclick="generateRandomBits()">Random Bits</button>
+              <button type="button" class="btn btn-warning" onclick="clearBits()">Clear</button>
+            </div>
+          </div>
 
         <!-- Auto Compute & Button -->
         <div class="mb-3 form-check">
@@ -240,6 +266,26 @@
 </div>
 
 <script>
+
+function generateRandomBits() {
+  // Retrieve bits_per_symbol from the hidden input
+  const bitsPerSymbol = parseInt(document.getElementById("bitsPerSymbol").value, 10);
+  
+  // Generate exactly bitsPerSymbol random bits (0 or 1)
+  let newBits = "";
+  for (let i = 0; i < bitsPerSymbol; i++) {
+    newBits += Math.random() < 0.5 ? "0" : "1";
+  }
+  
+  // Append these random bits to the sample_data input field
+  const sampleInput = document.querySelector('input[name="sample_data"]');
+  sampleInput.value += newBits;
+}
+
+function clearBits() {
+  // Simply clear the sample_data input
+  document.querySelector('input[name="sample_data"]').value = "";
+}
     // Time Domain Chart
         const timeData = {{ time_domain_data|safe }};
         const timeValues = {{ time_values|safe }};
